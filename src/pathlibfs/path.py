@@ -39,6 +39,9 @@ class PathFs:
     def __eq__(self, other: "PathFs"):
         return self.protocol == other.protocol and self.path == other.path
 
+    def __repr__(self):
+        return f"PathFs({self.urlpath})"
+
     @property
     def protocol(self):
         return self._fs.protocol
@@ -53,7 +56,10 @@ class PathFs:
 
     @property
     def urlpath(self):
-        return f"{self._chain}::{self.fullpath}"
+        if self._chain:
+            return f"{self._chain}::{self.fullpath}"
+        else:
+            return self.fullpath
 
     @property
     def sep(self):
@@ -194,10 +200,10 @@ class PathFs:
             else:
                 path += sep + b
         if self._path.startswith(sep) and not path.startswith(sep):
-            self._path = sep + path
+            path = sep + path
         elif not self._path.startswith(sep) and path.startswith(sep):
-            self._path = path.lstrip(sep)
-        return self
+            path = path.lstrip(sep)
+        return PathFs("", _fs=self._fs, _path=path, _chain=self._chain)
 
     def match(self, pattern: str):
         if self._fs.protocol == "file":
@@ -256,7 +262,9 @@ class PathFs:
 
     def glob(self, pattern, **kwargs):
         kwargs.pop("detail", None)
-        results = self._fs.glob(self.joinpath(pattern)._path, **kwargs)
+        p = self.joinpath(pattern)._path
+        print(p)
+        results = self._fs.glob(p, **kwargs)
         return [PathFs("", _fs=self._fs, _path=x, _chain=self._chain) for x in results]
 
     def group(self):
@@ -481,7 +489,7 @@ class PathFs:
 
     def ls(self, **kwargs):
         kwargs.pop("detail", None)
-        results = [PathFs("", _fs=self._fs, _path=x, _chain=self._chain) for x in self._fs.ls(**kwargs)]
+        results = [PathFs("", _fs=self._fs, _path=x, _chain=self._chain) for x in self._fs.ls(self._path, **kwargs)]
         return [x for x in results if x != self]
 
     def makedir(self, *args, **kwargs):

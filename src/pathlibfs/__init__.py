@@ -1,4 +1,4 @@
-from .exception import PathFsException, ProtocolNotKnown
+from .exception import PathFsException
 from .path import PathFs
 
-__all__ = ["PathFs", "PathFsException", "ProtocolNotKnown"]
+__all__ = ["PathFs", "PathFsException"]
