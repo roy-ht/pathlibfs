@@ -2,15 +2,15 @@ default_stages: [commit, push]
 fail_fast: true
 repos:
   - repo: https://github.com/pycqa/isort
-    rev: 5.10.0
+    rev: 5.10.1
     hooks:
       - id: isort
   - repo: https://github.com/ambv/black
-    rev: 21.10b0
+    rev: 22.3.0
     hooks:
       - id: black
   - repo: https://gitlab.com/PyCQA/flake8
-    rev: '3.8.3'
+    rev: 4.0.1
     hooks:
       - id: flake8
         additional_dependencies:
