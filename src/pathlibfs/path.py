@@ -1,8 +1,10 @@
+import copy
+import datetime
 import functools
 import os
 import pathlib
 import tempfile
-from typing import Any, List, Optional, Union
+from typing import IO, Any, List, Optional, Union
 
 import fsspec
 
@@ -13,7 +15,7 @@ def only_local(otherwise: Any = None):
     def deco(f):
         @functools.wraps(f)
         def wrapper(self, *args, **kwargs):
-            if self._fs.protocol == "file":
+            if self.protocol == "file":
                 return f(self, *args, **kwargs)
             elif otherwise is not None:
                 return otherwise
@@ -28,28 +30,40 @@ def only_local(otherwise: Any = None):
 class PathFs:
     """Wrapping fsspec and add some functionality"""
 
-    def __init__(self, urlpath: str, *, _fs=None, _path: str = "", _chain: str = "", **options):
+    def __init__(self, urlpath: Any, **options):
         """Create PathFs instance
 
         Args:
             urlpath (str): urlpath which fsspec supports
         """
-        if _fs:
-            self._fs = _fs
-            self._path = _path
-            self._chain = _chain
+        if isinstance(urlpath, PathFs):
+            spath = urlpath.urlpath
+        # Support PathLike object
+        elif hasattr(urlpath, "__fspath__") and callable(urlpath.__fspath__):
+            spath: str = str(urlpath.__fspath__())
         else:
-            fs, path = fsspec.core.url_to_fs(urlpath)
-            self._fs: fsspec.AbstractFileSystem = fs
-            self._path: str = path
-
-            chains = urlpath.rsplit("::", 1)
-            if len(chains) == 1:
-                self._chain = ""
+            spath: str = urlpath
+        fs, path = fsspec.core.url_to_fs(spath, **options)
+        self._fs: fsspec.AbstractFileSystem = fs
+        self._path: str = path
+        chains = spath.rsplit("::", 1)
+        if len(chains) == 1:
+            self._chain = ""
+        else:
+            self._chain = chains[0]
+        # determin protocol
+        if isinstance(self._fs.protocol, (list, tuple)):
+            for prt in self._fs.protocol:
+                if f"{prt}://" in spath:
+                    self._protocol = prt
+                    break
             else:
-                self._chain = chains[0]
+                self._protocol = self._fs.protocol[0]
+        else:
+            self._protocol = self._fs.protocol
+
         # normalize local path
-        if self._fs.protocol == "file":
+        if self.protocol == "file":
             self._path = os.path.normpath(self._path)
 
     def __truediv__(self, key: str):
@@ -61,7 +75,7 @@ class PathFs:
     def __repr__(self):
         return f"PathFs({self.urlpath})"
 
-    ################# Wrapper of pathlib
+    # ------------------------------- Wrapper of pathlib
 
     @property
     def sep(self):
@@ -155,7 +169,7 @@ class PathFs:
     @property
     def parts(self):
         """Return each path "directory", almost same as path.split(sep)"""
-        if self._fs.protocol == "file":
+        if self.protocol == "file":
             return pathlib.PurePath(self._path).parts
         else:
             parts = list(filter(None, self._path.split(self.sep)))
@@ -188,11 +202,11 @@ class PathFs:
                 p = norm_path.rsplit(self.sep, 1)
                 if not p[0]:  # ex: /etc
                     if self.protocol == "file":
-                        pp = PathFs("", _fs=self._fs, _path=self.sep, _chain=self._chain)
+                        pp = self.clone(self.sep)
                     else:
                         pp = self
                 else:
-                    pp = PathFs("", _fs=self._fs, _path=p[0], _chain=self._chain)
+                    pp = self.clone(p[0])
             self.__parent = pp
         return self.__parent
 
@@ -207,7 +221,7 @@ class PathFs:
     @property
     def name(self):
         """Return final path component, such as file name"""
-        if self._fs.protocol == "file":
+        if self.protocol == "file":
             return pathlib.PurePath(self._path).name
         else:
             return self._path.rsplit(self.sep, 1)[-1]
@@ -215,7 +229,7 @@ class PathFs:
     @property
     def suffix(self):
         """Return file extension"""
-        if self._fs.protocol == "file":
+        if self.protocol == "file":
             return pathlib.PurePath(self._path).suffix
         else:
             exts = self.name.rsplit(".", 1)
@@ -227,7 +241,7 @@ class PathFs:
     @property
     def suffixes(self):
         """Return file extensions, such as ['.tar', '.gz']"""
-        if self._fs.protocol == "file":
+        if self.protocol == "file":
             return pathlib.PurePath(self._path).suffixes
         else:
             exts = self.name.rsplit(".")
@@ -239,7 +253,7 @@ class PathFs:
     @property
     def stem(self):
         """Same as name - suffix"""
-        if self._fs.protocol == "file":
+        if self.protocol == "file":
             return pathlib.PurePath(self._path).stem
         else:
             name = self.name
@@ -248,7 +262,7 @@ class PathFs:
 
     def as_uri(self):
         """Path with protocol, such as file:///etc/passwd"""
-        if self._fs.protocol == "file":
+        if self.protocol == "file":
             return pathlib.PurePath(self._path).as_uri()
         else:
             return self._fs.unstrip_protocol(self._path)
@@ -269,11 +283,11 @@ class PathFs:
             path = sp + path
         elif not self._path.startswith(sp) and path.startswith(sp):
             path = path.lstrip(sp)
-        return PathFs("", _fs=self._fs, _path=path, _chain=self._chain)
+        return self.clone(path)
 
     def match(self, pattern: str):
         """Same as pathlib"""
-        if self._fs.protocol == "file":
+        if self.protocol == "file":
             return pathlib.PurePath(self._path).match(pattern)
         else:
             # if separator is not a slash, convert temporary
@@ -291,37 +305,35 @@ class PathFs:
 
     def with_name(self, name: str) -> "PathFs":
         """Same as pathlib"""
-        if self._fs.protocol == "file":
-            return PathFs("", _fs=self._fs, _path=str(pathlib.PurePath(self._path).with_name(name)), _chain=self._chain)
+        if self.protocol == "file":
+            return self.clone(str(pathlib.PurePath(self._path).with_name(name)))
         else:
             if not self.name:
                 raise ValueError(f"{self._path} has an empty name")
             path = self._path[: -len(self.name)] + name
-            return PathFs("", _fs=self._fs, _path=path, _chain=self._chain)
+            return self.clone(path)
 
     def with_suffix(self, suffix: str) -> "PathFs":
         """Same as pathlib"""
-        if self._fs.protocol == "file":
-            return PathFs(
-                "", _fs=self._fs, _path=str(pathlib.PurePath(self._path).with_suffix(suffix)), _chain=self._chain
-            )
+        if self.protocol == "file":
+            return self.clone(str(pathlib.PurePath(self._path).with_suffix(suffix)))
         else:
             path = self._path[: -len(self.suffix)] + suffix
-            return PathFs("", _fs=self._fs, _path=path, _chain=self._chain)
+            return self.clone(path)
 
-    ################# Wrapper of fsspec
+    # ------------------------------- Wrapper of fsspec
 
     @property
     def protocol(self):
         """Used protocol, such as s3, gcs, file, etc"""
-        return self._fs.protocol
+        return self._protocol
 
     def glob(self, pattern, **kwargs):
         """Call fsspec's glob API, and returns list of PathFs instance."""
         kwargs.pop("detail", None)
         p = self.joinpath(pattern)._path
         results = self._fs.glob(p, **kwargs)
-        return [PathFs("", _fs=self._fs, _path=x, _chain=self._chain) for x in results]
+        return [self.clone(x) for x in results]
 
     def open(  # noqa
         self,
@@ -330,7 +342,7 @@ class PathFs:
         cache_options: Optional[dict] = None,
         compression: Optional[str] = None,
         **kwargs,
-    ):
+    ) -> IO:
         """Open file"""
         return self._fs.open(
             self._path, mode=mode, block_size=block_size, cache_options=cache_options, compression=compression, **kwargs
@@ -340,9 +352,9 @@ class PathFs:
         """Same as fsspec"""
         return self._fs.ukey(self._path)
 
-    def tail(self, size: int = 1024):
+    def tail(self, size: int = 1024) -> bytes:
         """Same as fsspec"""
-        return self._fs.tail(size)
+        return self._fs.tail(self._path, size)
 
     def rm_file(self):
         """Same as fsspec"""
@@ -356,7 +368,7 @@ class PathFs:
         """Same as fsspec"""
         return self._fs.size(self._path)
 
-    def read_block(self, offset: int, length: int, delimiter: Optional[bytes] = None):
+    def read_block(self, offset: int, length: int, delimiter: Optional[bytes] = None) -> bytes:
         """Same as fsspec"""
         return self._fs.read_block(self._path, offset=offset, length=length, delimiter=delimiter)
 
@@ -385,14 +397,14 @@ class PathFs:
             raise exception.PathFsException("target must be same protocol")
         return self._fs.mv(self._path, target.path, recursive=recursive, maxdepth=maxdepth, **kwargs)
 
-    def modified(self):
+    def modified(self) -> datetime.datetime:
         """Same as fsspec"""
         return self._fs.modified(self._path)
 
     def ls(self, **kwargs):
         """Same as fsspec, but returns list of PathFs"""
         kwargs.pop("detail", None)
-        results = [PathFs("", _fs=self._fs, _path=x, _chain=self._chain) for x in self._fs.ls(self._path, **kwargs)]
+        results = [self.clone(x) for x in self._fs.ls(self._path, **kwargs)]
         return [x for x in results if x != self]
 
     def head(self, size: int = 1024):
@@ -432,12 +444,12 @@ class PathFs:
         """Same as fsspec, but returns list of PathFs"""
         kwargs.pop("detail", None)
         results = self._fs.find(self._path, maxdepth=maxdepth, withdirs=withdirs, **kwargs)
-        return [PathFs("", _fs=self._fs, _path=x, _chain=self._chain) for x in results]
+        return [self.clone(x) for x in results]
 
     def expand_path(self, recursive: bool = False, maxdepth: Optional[int] = None, **kwargs) -> List["PathFs"]:
         """Same as fsspec, but returns list of PathFs"""
         results = self._fs.expand_path(self._path, recursive=recursive, maxdepth=maxdepth, **kwargs)
-        return [PathFs("", _fs=self._fs, _path=x, _chain=self._chain) for x in results]
+        return [self.clone(x) for x in results]
 
     def du(self, total: bool = True, maxdepth: Optional[int] = None, **kwargs):
         """Same as fsspec"""
@@ -447,7 +459,7 @@ class PathFs:
         """Same as fsspec"""
         return self._fs.exists(self._path, **kwargs)
 
-    def created(self):
+    def created(self) -> datetime.datetime:
         """Same as fsspec"""
         return self._fs.created(self._path)
 
@@ -461,9 +473,9 @@ class PathFs:
 
     def clear_instance_cache(self):
         """Same as fsspec"""
-        return self.clear_instance_cache()
+        return self._fs.clear_instance_cache()
 
-    ################# Other
+    # ------------------------------- Other
 
     @property
     def fs(self):
@@ -493,7 +505,7 @@ class PathFs:
 
     def relative_to(self, p: str) -> str:
         """Return str instead pathlib returns Path instance"""
-        if self._fs.protocol == "file":
+        if self.protocol == "file":
             return str(pathlib.PurePath(self._path).relative_to(p))
         else:
             pp = self._fs.unstrip_protocol(p)
@@ -593,9 +605,9 @@ class PathFs:
         kwargs.pop("detail", None)
         for path, dirs, files in self._fs.walk(self._path, maxdepth=maxdepth, **kwargs):
             # dirs and files
-            yield PathFs("", _fs=self._fs, _path=path, _chain=self._chain), dirs, files
+            yield self.clone(path), dirs, files
 
-    ################# Alias of other method
+    # ------------------------------- Alias methods
 
     def stat(self, **kwargs):
         """Alias of info"""
@@ -660,3 +672,16 @@ class PathFs:
     def write_bytes(self, *args, **kwargs):
         """Alias of pipe_file"""
         return self.pipe_file(*args, **kwargs)
+
+    # ------------------------------- Original Extension
+
+    def islocal(self):
+        return self.protocol == "file"
+
+    def clone(self, path: Optional[str] = None):
+        """Copy instance with optional different path"""
+        # Maybe okey with shallow copy
+        other = copy.copy(self)
+        if path is not None:
+            other._path = path
+        return other
