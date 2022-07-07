@@ -1,2 +1,2 @@
-class PathFsException(Exception):
+class PathlibfsException(Exception):
     pass
