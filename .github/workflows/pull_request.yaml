@@ -24,7 +24,9 @@ jobs:
       with:
         python-version: '3.9'
     - run: curl -sSL https://install.python-poetry.org | python3 -
+    - name: Start services for unittest
+      run: docker-compose up -d
     - run: poetry install
     - run: poetry run pytest -vv --cov
-    - name:  Upload coverage to Codecov
+    - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
