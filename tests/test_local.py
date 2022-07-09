@@ -12,6 +12,7 @@ import pytest
 from fsspec.implementations.local import LocalFileSystem
 
 from pathlibfs import Path
+from pathlibfs.exception import PathlibfsException
 
 # Just wraps pathlib if local filesystem ---------------------------
 
@@ -166,23 +167,6 @@ def test_relative_to(tmp_path: pathlib.Path):
 # Just wraps fsspec ----------------------------------
 
 
-def test_protocol():
-    p = Path("a.txt")
-    assert p.protocol == "file"
-
-    p = Path("file://a.txt")
-    assert p.protocol == "file"
-
-    p = Path("simplecache::file://a.txt")
-    assert p.protocol == "file"
-
-    p = Path("s3://a/b.txt")
-    assert p.protocol == "s3"
-
-    p = Path("s3a://a/b.txt")
-    assert p.protocol == "s3a"
-
-
 def test_open(tmp_path: pathlib.Path):
     a = tmp_path / "a.txt"
     p = Path(a)
@@ -203,15 +187,6 @@ def test_tail(tmp_path: pathlib.Path):
         fo.write("Hello")
     p = Path(a)
     assert p.tail(3) == b"llo"
-
-
-def test_rm_file(tmp_path: pathlib.Path):
-    a = tmp_path / "a.txt"
-    a.touch()
-    assert a.exists()
-    p = Path(a)
-    p.rm_file()
-    assert not a.exists()
 
 
 def test_rm_file(tmp_path: pathlib.Path):
@@ -396,14 +371,6 @@ def test_rmdir(tmp_path: pathlib.Path):
 # Others ----------------------------------------
 
 
-def test_eq(tmp_path: pathlib.Path):
-    assert Path("a.txt") == Path("a.txt")
-    assert Path("a/b.txt") != Path("a/c.txt")
-    assert Path("file://a/b.txt") != Path("s3://a/c.txt")
-    # ignore chain
-    assert Path("simplecache::file://b.txt") == Path("file://b.txt")
-
-
 def test_repr(tmp_path: pathlib.Path):
     fullpath_str = tmp_path.absolute().as_uri()
     assert repr(Path(tmp_path)) == f"Path({fullpath_str})"
@@ -488,15 +455,15 @@ def test_put(tmp_path: pathlib.Path):
     a = tmp_path / "a.txt"
     a.write_text("Hello")
     b = tmp_path / "b.txt"
-    Path(a).put(b)
-    assert b.is_file()
+    with pytest.raises(PathlibfsException, match="must be a remote filesystem"):
+        Path(a).put(b)
 
 
-def test_mv(tmp_path: pathlib.Path):
+def test_move(tmp_path: pathlib.Path):
     a = tmp_path / "a.txt"
     a.write_text("Hello")
     b = tmp_path / "b.txt"
-    Path(a).mv(b)
+    Path(a).move(b)
     assert b.is_file()
     assert not a.exists()
 
@@ -511,8 +478,8 @@ def test_get(tmp_path: pathlib.Path):
     a = tmp_path / "a.txt"
     a.write_text("Hello")
     b = tmp_path / "b.txt"
-    Path(a).get(b)
-    assert b.is_file()
+    with pytest.raises(PathlibfsException, match="must be a remote filesystem"):
+        Path(a).get(b)
 
 
 def test_find(tmp_path: pathlib.Path):

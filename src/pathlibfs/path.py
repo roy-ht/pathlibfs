@@ -71,7 +71,7 @@ class Path:
         if self.protocol == "file":
             self._path = os.path.normpath(self._path)
 
-    def __truediv__(self, key: str):
+    def __truediv__(self, key: str) -> "Path":
         return self.joinpath(key)
 
     def __eq__(self, other: "Path"):
@@ -168,21 +168,23 @@ class Path:
         return pathlib.PurePath(self.path).is_reserved()
 
     @only_local()
-    def resolve(self, strict: bool = False) -> "Path":
-        """Same as pathlib for local, otherwise raise an exception"""
-        return Path(pathlib.Path(self.path).resolve(strict))
-
-    @only_local()
     def symlink_to(self, target: PathLike):
         """Same as pathlib for local, otherwise raise an exception"""
         if not isinstance(target, Path):
             target = Path(target)
         return pathlib.Path(self.path).symlink_to(target.path)
 
+    def resolve(self, strict: bool = False) -> "Path":
+        """Same as pathlib for local, otherwise raise an exception"""
+        if self.islocal():
+            return Path(pathlib.Path(self.path).resolve(strict))
+        else:
+            return self
+
     @property
     def parts(self):
         """Return each path "directory", almost same as path.split(sep)"""
-        if self.protocol == "file":
+        if self.islocal():
             return pathlib.PurePath(self._path).parts
         else:
             parts = list(filter(None, self._path.split(self.sep)))
@@ -261,7 +263,7 @@ class Path:
             if len(exts) == 1:
                 return []
             else:
-                return ["." + x for x in exts]
+                return ["." + x for x in exts[1:]]
 
     @property
     def stem(self):
@@ -271,7 +273,7 @@ class Path:
         else:
             name = self.name
             suffix = self.suffix
-            return name[-len(suffix) :]
+            return name[: -len(suffix)]
 
     def as_uri(self):
         """Path with protocol, such as file:///etc/passwd"""
@@ -393,14 +395,6 @@ class Path:
         """Same as fsspec"""
         return self._fs.pipe_file(self._path, data)
 
-    def mv(self, target: PathLike, recursive=False, maxdepth=None, **kwargs):
-        """Same as fsspec"""
-        if not isinstance(target, Path):
-            target = Path(target)
-        if self.protocol != target.protocol:
-            raise exception.PathlibfsException("target must be same protocol")
-        return self._fs.mv(self._path, target.path, recursive=recursive, maxdepth=maxdepth, **kwargs)
-
     def modified(self) -> datetime.datetime:
         """Same as fsspec"""
         return self._fs.modified(self._path)
@@ -434,21 +428,6 @@ class Path:
     def lexists(self):
         """Same as fsspec"""
         return self._fs.lexists(self._path)
-
-    def put(self, target: PathLike, recursive: bool = False, callback=fsspec.callbacks._DEFAULT_CALLBACK, **kwargs):
-        """Upload self into target"""
-        if not isinstance(target, Path):
-            target = Path(target)
-        if not self.islocal():
-            raise exception.PathlibfsException("self must be a local filesystem")
-        return self._fs.put(self.path, target.path, recursive=recursive, callback=callback, **kwargs)
-
-    def get(self, target: PathLike, recursive: bool = False, callback=fsspec.callbacks._DEFAULT_CALLBACK, **kwargs):
-        """Download file into target"""
-        target = target if isinstance(target, Path) else Path(target)
-        if not target.islocal():
-            raise exception.PathlibfsException("target must be a local filesystem")
-        return self._fs.get(self.path, target.path, recursive=recursive, callback=callback, **kwargs)
 
     def find(self, maxdepth: Optional[int] = None, withdirs: bool = False, **kwargs):
         """Same as fsspec, but returns list of Path"""
@@ -518,13 +497,15 @@ class Path:
         target = path if isinstance(path, Path) else Path(path)
         if self.protocol != target.protocol:
             raise exception.PathlibfsException("protocol must be same")
-        if self.protocol == "file":
+        if self.islocal():
             return str(pathlib.PurePath(self.path).relative_to(target.path))
         else:
-            pp = self._fs.unstrip_protocol(target.path)
-            fullpath = self._fs.unstrip_protocol(self.path)
-            if fullpath.startswith(pp):
-                return fullpath[len(pp) :]
+            tf = target.fullpath
+            sf = self.fullpath
+            if sf.startswith(tf + self.sep):
+                return sf[len(tf) + 1 :]
+            elif sf.startswith(tf):
+                return sf[len(tf) :]
             else:
                 raise ValueError(f"{self.path} does not start with {target.path}")
 
@@ -555,7 +536,12 @@ class Path:
 
     def rmdir(self):
         """Remove directory"""
-        return self._fs.rmdir(self._path)
+        # Special care: in s3fs, rmdir tries to remove bucket.
+        # So call it with sub directory, redirect to rm(recursive=True)
+        if self.protocol == "s3" and self.sep in self.path[1:]:
+            return self.rm(recursive=True)
+        else:
+            return self._fs.rmdir(self._path)
 
     def samefile(self, target: PathLike):
         """Check target points a same path"""
@@ -579,6 +565,28 @@ class Path:
         return self.joinpath("**").glob(pattern)
 
     def copy(self, dst: PathLike, recursive: bool = False, on_error: Optional[str] = None, **kwargs):
+        """If dst is same protocol, Same bihavior as fsspec.
+
+        And differene with procol combinations:
+        * self is remote and dst is local : download
+        * self is local and dst is remote: upload
+        * otherwise download then upload
+        """
+        if not isinstance(dst, Path):
+            dst = Path(dst)
+        if self.protocol == dst.protocol:
+            self._fs.copy(self.path, dst.path, recursive=recursive, on_error=on_error, **kwargs)
+        elif self.islocal() and not dst.islocal():  # local -> remote = upload
+            dst.put(self, recursive=recursive, **kwargs)
+        elif not self.islocal() and dst.islocal():  # remote -> local = download
+            self.get(dst, recursive=recursive, **kwargs)
+        else:  # remote -> other remote
+            # TODO: more precise and efficient way
+            with tempfile.TemporaryDirectory() as tdir:
+                self.get(tdir, recursive=recursive, **kwargs)
+                dst.put(tdir, recursive=recursive, **kwargs)
+
+    def move(self, dst: PathLike, recursive=False, maxdepth=None, **kwargs):
         """If dst is str, Same bihavior as fsspec.
 
         If dst is Path instance somethind different:
@@ -586,19 +594,48 @@ class Path:
         * dst is local and self is not: get
         * otherwise get and put
         """
+        """If dst is same protocol, Same bihavior as fsspec.
+
+        And differene with procol combinations:
+        * self is remote and dst is local : download
+        * self is local and dst is remote: upload
+        * otherwise download then upload
+        """
         if not isinstance(dst, Path):
             dst = Path(dst)
-        if not self.islocal() and dst.islocal():  # remote -> local
+        if self.protocol == dst.protocol:
+            self._fs.mv(self._path, dst.path, recursive=recursive, maxdepth=maxdepth, **kwargs)
+        elif self.islocal() and not dst.islocal():  # local -> remote = upload
+            dst.put(self, recursive=recursive, **kwargs)
+            self.rm(recursive=recursive, maxdepth=maxdepth)
+        elif not self.islocal() and dst.islocal():  # remote -> local = download
             self.get(dst, recursive=recursive, **kwargs)
-        elif self.islocal() and not dst.islocal():  # local -> remote
-            dst.put(self)
-        elif self.protocol == dst.protocol:  # just copy
-            self._fs.copy(self.path, dst.path, recursive=recursive, on_error=on_error, **kwargs)
-        else:  # remote -> remote
+            self.rm(recursive=recursive, maxdepth=maxdepth)
+        else:  # remote -> other remote
             # TODO: more precise and efficient way
             with tempfile.TemporaryDirectory() as tdir:
                 self.get(tdir, recursive=recursive, **kwargs)
                 dst.put(tdir, recursive=recursive, **kwargs)
+            self.rm(recursive=recursive, maxdepth=maxdepth)
+
+    def put(self, target: PathLike, recursive: bool = False, callback=fsspec.callbacks._DEFAULT_CALLBACK, **kwargs):
+        """Upload local file target into self"""
+        if self.islocal():
+            raise exception.PathlibfsException("self must be a remote filesystem")
+        if not isinstance(target, Path):
+            target = Path(target)
+        if not target.islocal():
+            raise exception.PathlibfsException("target must be a local filesystem")
+        return self._fs.put(target.path, self.path, recursive=recursive, callback=callback, **kwargs)
+
+    def get(self, target: PathLike, recursive: bool = False, callback=fsspec.callbacks._DEFAULT_CALLBACK, **kwargs):
+        """Download self into target"""
+        if self.islocal():
+            raise exception.PathlibfsException("self must be a remote filesystem")
+        target = target if isinstance(target, Path) else Path(target)
+        if not target.islocal():
+            raise exception.PathlibfsException("target must be a local filesystem")
+        return self._fs.get(self.path, target.path, recursive=recursive, callback=callback, **kwargs)
 
     def makedirs(self, exist_ok: bool = False, **kwargs):
         """Alias of mkdir with making parent dirs"""
@@ -670,9 +707,9 @@ class Path:
         """Alias of put"""
         return self.put(*args, **kwargs)
 
-    def move(self, *args, **kwargs):
-        """Alias of mv"""
-        return self.mv(*args, **kwargs)
+    def mv(self, *args, **kwargs):
+        """Alias of move"""
+        return self.move(*args, **kwargs)
 
     def rename(self, *args, **kwargs):
         """Alias of mv"""
@@ -698,15 +735,3 @@ class Path:
         if path is not None:
             other._path = path
         return other
-
-    def send(self, target: PathLike, recursive: bool = False, callback=fsspec.callbacks._DEFAULT_CALLBACK, **kwargs):
-        """Upload target into self"""
-        if not isinstance(target, Path):
-            target = Path(target)
-        target.put(self, recursive=recursive, callback=callback, **kwargs)
-
-    def receive(self, target: PathLike, recursive: bool = False, callback=fsspec.callbacks._DEFAULT_CALLBACK, **kwargs):
-        """Download target into self"""
-        if not isinstance(target, Path):
-            target = Path(target)
-        target.get(self, recursive=recursive, callback=callback, **kwargs)
