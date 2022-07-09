@@ -15,6 +15,7 @@ gcsfs = "^2022.5.0"
 adlfs = "^2022.2.0"
 ipython = '*'
 pytest = "^7.1.2"
+pytest-cov = "^3.0.0"
 
 [tool.black]
 line-length = 120
@@ -25,6 +26,9 @@ python_version = "3.7"
 
 [tool.isort]
 profile = "black"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

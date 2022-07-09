@@ -1,4 +1,4 @@
-from .exception import PathFsException
-from .path import PathFs
+from .exception import PathlibfsException
+from .path import Path
 
-__all__ = ["PathFs", "PathFsException"]
+__all__ = ["Path", "PathlibfsException"]
