@@ -25,4 +25,4 @@ jobs:
         python-version: '3.9'
     - run: curl -sSL https://install.python-poetry.org | python3 -
     - run: poetry install
-    - run: poetry run pytest
+    - run: poetry run pytest -vv

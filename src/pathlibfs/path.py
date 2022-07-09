@@ -726,6 +726,7 @@ class Path:
     # ------------------------------- Original Extension
 
     def islocal(self):
+        """Check if Local file path or not"""
         return self.protocol == "file"
 
     def clone(self, path: Optional[str] = None):

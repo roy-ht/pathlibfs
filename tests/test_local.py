@@ -610,6 +610,6 @@ def test_walk(tmp_path: pathlib.Path):
     b.touch()
     c.touch()
     d.touch()
-    for root, dirs, files in Path(tmp_path).walk():
+    for root, _, files in Path(tmp_path).walk():
         for name in files:
             assert root / name in (Path(a), Path(b), Path(c), Path(d))

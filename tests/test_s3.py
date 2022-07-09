@@ -3,13 +3,10 @@
 Check wrapping methods as simple as possible
 """
 
-import datetime
-import os
 import pathlib
 import time
 import types
 import uuid
-from typing import Optional
 
 import pytest
 
@@ -275,9 +272,16 @@ def test_info(tmp: Path):
     a.touch()
     info = a.info()
     assert isinstance(info, dict)
-    assert set(info.keys()) == set(
-        ["ETag", "LastModified", "size", "name", "type", "StorageClass", "VersionId", "ContentType"]
-    )
+    assert set(info.keys()) == {
+        "ETag",
+        "LastModified",
+        "size",
+        "name",
+        "type",
+        "StorageClass",
+        "VersionId",
+        "ContentType",
+    }
 
 
 def test_invalidate_cache(tmp: Path):
@@ -450,10 +454,9 @@ def test_move(tmp: Path, tmp_path: pathlib.Path):
     assert not a.exists()
     subdir.move(tmp_path, recursive=True)
     assert not subdir.exists()
-    l = list(tmp_path.iterdir())
-    assert tmp_path.joinpath("b.txt").exists(), l
-    assert tmp_path.joinpath("subsub/d.txt").exists(), l
-    assert tmp_path.joinpath("subsub/e.txt").exists(), l
+    assert tmp_path.joinpath("b.txt").exists(), list(tmp_path.iterdir())
+    assert tmp_path.joinpath("subsub/d.txt").exists(), list(tmp_path.iterdir())
+    assert tmp_path.joinpath("subsub/e.txt").exists(), list(tmp_path.iterdir())
 
 
 def test_ls(tmp: Path):
@@ -577,10 +580,9 @@ def test_copy(tmp: Path, tmp_path: pathlib.Path):
     a.copy(e)
     assert e.is_file()
     subdir.copy(tmp_path, recursive=True)
-    l = list(tmp_path.iterdir())
-    assert tmp_path.joinpath("a.txt").exists(), l
-    assert tmp_path.joinpath("subsub/d.txt").exists(), l
-    assert tmp_path.joinpath("subsub/e.txt").exists(), l
+    assert tmp_path.joinpath("a.txt").exists(), list(tmp_path.iterdir())
+    assert tmp_path.joinpath("subsub/d.txt").exists(), list(tmp_path.iterdir())
+    assert tmp_path.joinpath("subsub/e.txt").exists(), list(tmp_path.iterdir())
 
 
 def test_makedirs(tmp: Path):
@@ -601,6 +603,6 @@ def test_walk(tmp: Path):
     b.touch()
     c.touch()
     d.touch()
-    for root, dirs, files in tmp.walk():
+    for root, _, files in tmp.walk():
         for name in files:
             assert root / name in (a, b, c, d)

@@ -1,2 +1,2 @@
 class PathlibfsException(Exception):
-    pass
+    """Base exception for pathlibfs"""
