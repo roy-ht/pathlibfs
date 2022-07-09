@@ -27,6 +27,6 @@ jobs:
     - name: Start services for unittest
       run: docker-compose up -d
     - run: poetry install
-    - run: poetry run pytest -vv --cov
+    - run: poetry run pytest -vv --cov=./ --cov-report=xml
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
