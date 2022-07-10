@@ -1,8 +1,7 @@
 on:
   pull_request:
     branches:
-    - '**'
-    # - 'releases/**'
+    - 'releases/**'
 
 jobs:
   check_diff:
@@ -13,7 +12,7 @@ jobs:
       id: check-diff
       with:
         PATTERNS: |
-          !pyproject.toml
+          src/**
     - name: Fail if src changed
       run: |
         echo ":rotating_light: MUST NOT MODIFY SOURCE FILES FOR RELEASE :rotating_light:" >> $GITHUB_STEP_SUMMARY
@@ -46,6 +45,7 @@ jobs:
     - uses: actions/download-artifact@v3
       with:
         name: dist
+        path: dist
     - name: Publish to test PyPI
       uses: pypa/gh-action-pypi-publish@v1.5.0
       with:
@@ -63,6 +63,7 @@ jobs:
     - uses: actions/download-artifact@v3
       with:
         name: dist
+        path: dist
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@v1.5.0
       with:
