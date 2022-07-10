@@ -2,6 +2,7 @@
 name = "pathlibfs"
 version = "0.1.0"
 description = "pathlib 🤝 fsspec, manipulate remote filesystem paths."
+readme = "README.md"
 authors = ["Hiroyuki Tanaka <aflc0x@gmail.com>"]
 license = "MIT"
 
