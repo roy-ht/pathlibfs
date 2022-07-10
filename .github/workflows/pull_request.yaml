@@ -2,7 +2,8 @@ name: check
 
 on:
   push:
-  pull_request:
+    branches:
+    - '**'
 
 jobs:
   lint:
