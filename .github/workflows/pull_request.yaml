@@ -1,12 +1,12 @@
 name: check
 
 on:
-  pull_request:
-    branches-ignore:
-    - releases/**
   push:
     branches:
     - main
+  pull_request:
+    branches:
+    - '!releases/**'
 
 jobs:
   lint:

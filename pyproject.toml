@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "pathlibfs"
 version = "0.1.0"
-description = ""
+description = "pathlib 🤝 fsspec, manipulate remote filesystem paths."
 authors = ["Hiroyuki Tanaka <aflc0x@gmail.com>"]
 license = "MIT"
 
