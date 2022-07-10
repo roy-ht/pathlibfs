@@ -116,6 +116,12 @@ def test_symlink_to(tmp: Path):
 def test_parts(tmp: Path):
     assert tmp.parts[0] == "pathlibfs"
     assert len(tmp.parts) == 2
+    p = Path("s3:///a/b.txt")
+    assert p.parts == ("a", "b.txt")
+    p = Path("s3:////a/b.txt")
+    assert p.parts == ("a", "b.txt")
+    p = Path("s3:///a//b.txt")
+    assert p.parts == ("a", "", "b.txt")
 
 
 def test_name(tmp: Path):
@@ -138,10 +144,6 @@ def test_stem(tmp: Path):
     assert a.stem == "a.tar"
 
 
-def test_as_uri(tmp: Path):
-    assert tmp.as_uri().startswith("s3://")
-
-
 def test_match():
     a = Path("s3://a/b/c/d.txt")
     assert a.match("d.txt")
@@ -152,6 +154,10 @@ def test_match():
 def test_relative_to(tmp: Path):
     a = tmp / "a/b/c.txt"
     assert a.relative_to(tmp) == "a/b/c.txt"
+    with pytest.raises(PathlibfsException, match="protocol must be same"):
+        assert a.relative_to("a")
+    with pytest.raises(ValueError, match="does not start with"):
+        assert a.relative_to(Path("s3://hoge"))
 
 
 # Just wraps fsspec ----------------------------------
@@ -347,17 +353,16 @@ def test_rmdir(tmp: Path):
     subdir = tmp / "sub"
     a = subdir / "a.txt"
     a.touch()
-    # rmdir removes all files even if directory is not empty, it's same as rm(recursive=True)
-    subdir.rmdir()
-    assert not a.exists()
-    assert not subdir.exists()
+    # rmdir tries to remove thebucket, so no op if bucket is not empty
+    with pytest.raises(PathlibfsException):
+        subdir.rmdir()
 
 
 # Others ----------------------------------------
 
 
 def test_repr(tmp: Path):
-    fullpath_str = tmp.as_uri()
+    fullpath_str = tmp.fullpath
     assert repr(tmp) == f"Path({fullpath_str})"
 
 
@@ -491,14 +496,14 @@ def test_expand_path(tmp: Path):
 
 def test_path():
     assert Path("s3://a.txt").path == "a.txt"
-    assert Path("s3:///etc/a.txt").path == "/etc/a.txt"
+    assert Path("s3:///etc/a.txt").path == "etc/a.txt"
     assert Path("s3://a/b/c.txt").path == "a/b/c.txt"
     assert Path("s3://a").joinpath("b.txt").path == "a/b.txt"
 
 
 def test_fullpath():
     assert Path("s3://a.txt").fullpath == "s3://a.txt"
-    assert Path("s3:///etc/a.txt").fullpath == "s3:///etc/a.txt"
+    assert Path("s3:///etc/a.txt").fullpath == "s3://etc/a.txt"
     assert Path("s3://a/b/c.txt").fullpath == "s3://a/b/c.txt"
     assert Path("s3://a").joinpath("b.txt").fullpath == "s3://a/b.txt"
 

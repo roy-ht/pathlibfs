@@ -50,12 +50,6 @@ class Path:
         # local file system path might be relative
         if self._fs.protocol == "file":
             path = spath.rsplit("://")[-1]
-        self._path: str = path
-        chains = spath.rsplit("::", 1)
-        if len(chains) == 1:
-            self._chain = ""
-        else:
-            self._chain = chains[0]
         # determin protocol
         if isinstance(self._fs.protocol, (list, tuple)):
             for prt in self._fs.protocol:
@@ -66,10 +60,13 @@ class Path:
                 self._protocol = self._fs.protocol[0]
         else:
             self._protocol = self._fs.protocol
-
-        # normalize local path
-        if self.protocol == "file":
-            self._path = os.path.normpath(self._path)
+        # must set path after set protocol
+        self.path = path
+        chains = spath.rsplit("::", 1)
+        if len(chains) == 1:
+            self._chain = ""
+        else:
+            self._chain = chains[0]
 
     def __truediv__(self, key: str) -> "Path":
         return self.joinpath(key)
@@ -89,12 +86,6 @@ class Path:
         return self.fullpath
 
     # ------------------------------- Wrapper of pathlib
-
-    @property
-    def sep(self):
-        """Path separator"""
-        return self._fs.sep
-
     @property
     @only_local("")
     def drive(self) -> str:
@@ -187,11 +178,7 @@ class Path:
         if self.islocal():
             return pathlib.PurePath(self._path).parts
         else:
-            parts = list(filter(None, self._path.split(self.sep)))
-            if self._path.startswith(self.sep):
-                return tuple(parts[1:])
-            else:
-                return tuple(parts)
+            return tuple(self.path.split(self.sep))
 
     @property
     def anchor(self):
@@ -275,15 +262,8 @@ class Path:
             suffix = self.suffix
             return name[: -len(suffix)]
 
-    def as_uri(self):
-        """Path with protocol, such as file:///etc/passwd"""
-        if self.protocol == "file":
-            return pathlib.PurePath(self._path).as_uri()
-        else:
-            return self._fs.unstrip_protocol(self._path)
-
-    def joinpath(self, *p):
-        """self._path might have leading slash /, so it preserve this condition"""
+    def joinpath(self, *p) -> "Path":
+        """self.path might have leading slash /, so it preserve this condition"""
         # below code is based on CPython's os.path.join
         sp = self.sep
         path = self._path
@@ -294,10 +274,7 @@ class Path:
                 path += b
             else:
                 path += sp + b
-        if self._path.startswith(sp) and not path.startswith(sp):
-            path = sp + path
-        elif not self._path.startswith(sp) and path.startswith(sp):
-            path = path.lstrip(sp)
+        # some protocol might be have an leading separator as root.
         return self.clone(path)
 
     def match(self, pattern: str):
@@ -339,6 +316,11 @@ class Path:
     # ------------------------------- Wrapper of fsspec
 
     @property
+    def sep(self):
+        """Path separator"""
+        return self._fs.sep
+
+    @property
     def protocol(self):
         """Used protocol, such as s3, gcs, file, etc"""
         return self._protocol
@@ -346,7 +328,7 @@ class Path:
     def glob(self, pattern, **kwargs):
         """Call fsspec's glob API, and returns list of Path instance."""
         kwargs.pop("detail", None)
-        p = self.joinpath(pattern)._path
+        p = self.joinpath(pattern).path
         results = self._fs.glob(p, **kwargs)
         return [self.clone(x) for x in results]
 
@@ -479,6 +461,17 @@ class Path:
         """
         return self._path
 
+    @path.setter
+    def path(self, p: str):
+        """Set path"""
+        # normalize local path
+        if self.islocal():
+            self._path = os.path.normpath(p)
+        elif self.protocol == "s3":
+            self._path = p.lstrip(self.sep)  # Remove leading separator
+        else:
+            self._path = p
+
     @property
     def fullpath(self):
         """Path with protocol like file://a/b/c.txt or s3://mybucket/some/file.txt"""
@@ -504,8 +497,6 @@ class Path:
             sf = self.fullpath
             if sf.startswith(tf + self.sep):
                 return sf[len(tf) + 1 :]
-            elif sf.startswith(tf):
-                return sf[len(tf) :]
             else:
                 raise ValueError(f"{self.path} does not start with {target.path}")
 
@@ -520,7 +511,7 @@ class Path:
         if exist_ok:
             if parents:
                 self._fs.makedirs(self._path, exist_ok=True)
-            else:
+            elif not self.isdir():
                 self._fs.mkdir(self._path, create_parents=False, **kwargs)
         else:
             self._fs.mkdir(self._path, create_parents=parents, **kwargs)
@@ -539,7 +530,7 @@ class Path:
         # Special care: in s3fs, rmdir tries to remove bucket.
         # So call it with sub directory, redirect to rm(recursive=True)
         if self.protocol == "s3" and self.sep in self.path[1:]:
-            return self.rm(recursive=True)
+            raise exception.PathlibfsException("rmdir only can call with a bucket, but it points some key.")
         else:
             return self._fs.rmdir(self._path)
 
@@ -562,7 +553,7 @@ class Path:
 
     def rglob(self, pattern, **kwargs):
         """Glob recursively"""
-        return self.joinpath("**").glob(pattern)
+        return self.joinpath("**").glob(pattern, **kwargs)
 
     def copy(self, dst: PathLike, recursive: bool = False, on_error: Optional[str] = None, **kwargs):
         """If dst is same protocol, Same bihavior as fsspec.
@@ -659,67 +650,67 @@ class Path:
 
     # ------------------------------- Alias methods
 
-    def stat(self, **kwargs):
+    def stat(self, **kwargs):  # pragma: no cover
         """Alias of info"""
         return self.info(**kwargs)
 
-    def is_dir(self):
+    def is_dir(self):  # pragma: no cover
         """Alias of isdir"""
         return self.isdir()
 
-    def is_file(self):
+    def is_file(self):  # pragma: no cover
         """Alias of isfile"""
         return self.isfile()
 
-    def unlink(self):
+    def unlink(self):  # pragma: no cover
         """Alias of rm"""
         return self.rm()
 
-    def cp(self, *args, **kwargs):
+    def cp(self, *args, **kwargs):  # pragma: no cover
         """Alias of copy"""
         return self.copy(*args, **kwargs)
 
-    def delete(self, *args, **kwargs):
+    def delete(self, *args, **kwargs):  # pragma: no cover
         """Alias of rm"""
         return self.rm(*args, **kwargs)
 
-    def disk_usage(self, *args, **kwargs):
+    def disk_usage(self, *args, **kwargs):  # pragma: no cover
         """Alias of du"""
         return self.du(*args, **kwargs)
 
-    def download(self, *args, **kwargs):
+    def download(self, *args, **kwargs):  # pragma: no cover
         """Alias of get"""
         return self.get(*args, **kwargs)
 
-    def listdir(self, **kwargs):
+    def listdir(self, **kwargs):  # pragma: no cover
         """Alias of ls"""
         return self.ls(**kwargs)
 
-    def makedir(self, *args, **kwargs):
+    def makedir(self, *args, **kwargs):  # pragma: no cover
         """Alias of mkdir"""
         return self.mkdir(*args, **kwargs)
 
-    def mkdirs(self, *args, **kwargs):
+    def mkdirs(self, *args, **kwargs):  # pragma: no cover
         """Alias of makedirs"""
         return self.makedirs(*args, **kwargs)
 
-    def upload(self, *args, **kwargs):
+    def upload(self, *args, **kwargs):  # pragma: no cover
         """Alias of put"""
         return self.put(*args, **kwargs)
 
-    def mv(self, *args, **kwargs):
+    def mv(self, *args, **kwargs):  # pragma: no cover
         """Alias of move"""
         return self.move(*args, **kwargs)
 
-    def rename(self, *args, **kwargs):
-        """Alias of mv"""
-        return self.replace(*args, **kwargs)
+    def rename(self, *args, **kwargs):  # pragma: no cover
+        """Alias of move"""
+        return self.move(*args, **kwargs)
 
-    def replace(self, *args, **kwargs):
-        """Alias of mv"""
-        return self.mv(*args, **kwargs)
+    def replace(self, *args, **kwargs):  # pragma: no cover
+        """Alias of move"""
+        return self.move(*args, **kwargs)
 
-    def write_bytes(self, *args, **kwargs):
+    def write_bytes(self, *args, **kwargs):  # pragma: no cover
         """Alias of pipe_file"""
         return self.pipe_file(*args, **kwargs)
 
@@ -734,5 +725,5 @@ class Path:
         # Maybe okey with shallow copy
         other = copy.copy(self)
         if path is not None:
-            other._path = path
+            other.path = path
         return other

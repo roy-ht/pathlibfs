@@ -14,6 +14,11 @@ from fsspec.implementations.local import LocalFileSystem
 from pathlibfs import Path
 from pathlibfs.exception import PathlibfsException
 
+
+def test_fs():
+    assert isinstance(Path("a.txt").fs, LocalFileSystem)
+
+
 # Just wraps pathlib if local filesystem ---------------------------
 
 
@@ -111,7 +116,7 @@ def test_symlink_to(tmp_path: pathlib.Path):
     a = tmp_path / "a.txt"
     a.touch()
     b = tmp_path / "b.txt"
-    b.symlink_to(a)
+    Path(b).symlink_to(a)
     assert b.is_symlink()
 
 
@@ -123,29 +128,27 @@ def test_parts(tmp_path: pathlib.Path):
 def test_name(tmp_path: pathlib.Path):
     p = Path(tmp_path)
     assert tmp_path.name == p.name
+    assert Path("/a/b/").name == "b"
 
 
 def test_suffix(tmp_path: pathlib.Path):
     a = tmp_path / "a.tar.gz"
     p = Path(a)
     assert p.suffix == ".gz"
+    assert Path("README").suffix == ""
 
 
 def test_suffixes(tmp_path: pathlib.Path):
     a = tmp_path / "a.tar.gz"
     p = Path(a)
     assert p.suffixes == [".tar", ".gz"]
+    assert Path("README").suffixes == []
 
 
 def test_stem(tmp_path: pathlib.Path):
     a = tmp_path / "a.tar.gz"
     p = Path(a)
     assert p.stem == "a.tar"
-
-
-def test_as_uri(tmp_path: pathlib.Path):
-    p = Path(tmp_path)
-    assert tmp_path.as_uri() == p.as_uri()
 
 
 def test_match():
@@ -416,6 +419,7 @@ def test_joinpath(tmp_path: pathlib.Path):
     assert str(a) == p.path
     p2 = Path(tmp_path).joinpath("sub").joinpath("a.txt")
     assert p == p2
+    assert Path("a.txt").joinpath("/b") == Path("/b")
 
 
 def test_with_name(tmp_path: pathlib.Path):
@@ -533,6 +537,17 @@ def test_mkdir(tmp_path: pathlib.Path):
         Path(s).mkdir()
     Path(s).mkdir(parents=True)
     assert s.is_dir()
+    with pytest.raises(FileExistsError):
+        Path(s).mkdir()
+    Path(s).mkdir(exist_ok=True)
+    t = tmp_path / "a" / "d" / "e"
+    with pytest.raises(FileNotFoundError):
+        Path(t).mkdir(exist_ok=True)
+    Path(t).mkdir(parents=True)
+    Path(t).isdir()
+    with pytest.raises(FileExistsError):
+        Path(t).mkdir(parents=True)
+    Path(t).mkdir(parents=True, exist_ok=True)
 
 
 def test_read_bytes(tmp_path: pathlib.Path):
@@ -559,6 +574,8 @@ def test_touch(tmp_path: pathlib.Path):
     p = Path(a)
     p.touch()
     assert p.isfile()
+    with pytest.raises(FileExistsError):
+        p.touch(exist_ok=False)
 
 
 def test_write_text(tmp_path: pathlib.Path):
