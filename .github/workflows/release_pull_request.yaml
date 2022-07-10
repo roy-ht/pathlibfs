@@ -1,8 +1,7 @@
 on:
   pull_request:
     branches:
-    - 'releases/**'
-    - '!releases/**-alpha'
+    - 're**'
 
 jobs:
   check_diff:
