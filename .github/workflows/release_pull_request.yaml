@@ -2,6 +2,7 @@ on:
   pull_request:
     branches:
     - 'releases/**'
+    - '!releases/**-alpha'
 
 jobs:
   check_diff:
