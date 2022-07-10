@@ -1,7 +1,5 @@
 on:
-  pull_request:
-    branches:
-    - 'releases/v0.1.0'
+  pull_request
 
 jobs:
   check_diff:
