@@ -143,11 +143,6 @@ def test_stem(tmp_path: pathlib.Path):
     assert p.stem == "a.tar"
 
 
-def test_as_uri(tmp_path: pathlib.Path):
-    p = Path(tmp_path)
-    assert tmp_path.as_uri() == p.as_uri()
-
-
 def test_match():
     a = pathlib.Path("a/b/c/d.txt")
     p = Path(a)

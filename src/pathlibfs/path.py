@@ -89,12 +89,6 @@ class Path:
         return self.fullpath
 
     # ------------------------------- Wrapper of pathlib
-
-    @property
-    def sep(self):
-        """Path separator"""
-        return self._fs.sep
-
     @property
     @only_local("")
     def drive(self) -> str:
@@ -275,14 +269,7 @@ class Path:
             suffix = self.suffix
             return name[: -len(suffix)]
 
-    def as_uri(self):
-        """Path with protocol, such as file:///etc/passwd"""
-        if self.protocol == "file":
-            return pathlib.PurePath(self._path).as_uri()
-        else:
-            return self._fs.unstrip_protocol(self._path)
-
-    def joinpath(self, *p):
+    def joinpath(self, *p) -> "Path":
         """self._path might have leading slash /, so it preserve this condition"""
         # below code is based on CPython's os.path.join
         sp = self.sep
@@ -339,6 +326,11 @@ class Path:
     # ------------------------------- Wrapper of fsspec
 
     @property
+    def sep(self):
+        """Path separator"""
+        return self._fs.sep
+
+    @property
     def protocol(self):
         """Used protocol, such as s3, gcs, file, etc"""
         return self._protocol
@@ -346,7 +338,7 @@ class Path:
     def glob(self, pattern, **kwargs):
         """Call fsspec's glob API, and returns list of Path instance."""
         kwargs.pop("detail", None)
-        p = self.joinpath(pattern)._path
+        p = self.joinpath(pattern).path
         results = self._fs.glob(p, **kwargs)
         return [self.clone(x) for x in results]
 
@@ -539,7 +531,7 @@ class Path:
         # Special care: in s3fs, rmdir tries to remove bucket.
         # So call it with sub directory, redirect to rm(recursive=True)
         if self.protocol == "s3" and self.sep in self.path[1:]:
-            return self.rm(recursive=True)
+            raise exception.PathlibfsException("rmdir only can call with a bucket, but it points some key.")
         else:
             return self._fs.rmdir(self._path)
 
@@ -562,7 +554,7 @@ class Path:
 
     def rglob(self, pattern, **kwargs):
         """Glob recursively"""
-        return self.joinpath("**").glob(pattern)
+        return self.joinpath("**").glob(pattern, **kwargs)
 
     def copy(self, dst: PathLike, recursive: bool = False, on_error: Optional[str] = None, **kwargs):
         """If dst is same protocol, Same bihavior as fsspec.
@@ -712,12 +704,12 @@ class Path:
         return self.move(*args, **kwargs)
 
     def rename(self, *args, **kwargs):
-        """Alias of mv"""
-        return self.replace(*args, **kwargs)
+        """Alias of move"""
+        return self.move(*args, **kwargs)
 
     def replace(self, *args, **kwargs):
-        """Alias of mv"""
-        return self.mv(*args, **kwargs)
+        """Alias of move"""
+        return self.move(*args, **kwargs)
 
     def write_bytes(self, *args, **kwargs):
         """Alias of pipe_file"""

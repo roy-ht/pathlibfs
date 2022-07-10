@@ -138,10 +138,6 @@ def test_stem(tmp: Path):
     assert a.stem == "a.tar"
 
 
-def test_as_uri(tmp: Path):
-    assert tmp.as_uri().startswith("s3://")
-
-
 def test_match():
     a = Path("s3://a/b/c/d.txt")
     assert a.match("d.txt")
@@ -347,17 +343,16 @@ def test_rmdir(tmp: Path):
     subdir = tmp / "sub"
     a = subdir / "a.txt"
     a.touch()
-    # rmdir removes all files even if directory is not empty, it's same as rm(recursive=True)
-    subdir.rmdir()
-    assert not a.exists()
-    assert not subdir.exists()
+    # rmdir tries to remove thebucket, so no op if bucket is not empty
+    with pytest.raises(PathlibfsException):
+        subdir.rmdir()
 
 
 # Others ----------------------------------------
 
 
 def test_repr(tmp: Path):
-    fullpath_str = tmp.as_uri()
+    fullpath_str = tmp.fullpath
     assert repr(tmp) == f"Path({fullpath_str})"
 
 
