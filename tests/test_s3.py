@@ -116,6 +116,12 @@ def test_symlink_to(tmp: Path):
 def test_parts(tmp: Path):
     assert tmp.parts[0] == "pathlibfs"
     assert len(tmp.parts) == 2
+    p = Path("s3:///a/b.txt")
+    assert p.parts == ("a", "b.txt")
+    p = Path("s3:////a/b.txt")
+    assert p.parts == ("a", "b.txt")
+    p = Path("s3:///a//b.txt")
+    assert p.parts == ("a", "", "b.txt")
 
 
 def test_name(tmp: Path):
@@ -148,6 +154,10 @@ def test_match():
 def test_relative_to(tmp: Path):
     a = tmp / "a/b/c.txt"
     assert a.relative_to(tmp) == "a/b/c.txt"
+    with pytest.raises(PathlibfsException, match="protocol must be same"):
+        assert a.relative_to("a")
+    with pytest.raises(ValueError, match="does not start with"):
+        assert a.relative_to(Path("s3://hoge"))
 
 
 # Just wraps fsspec ----------------------------------
@@ -486,14 +496,14 @@ def test_expand_path(tmp: Path):
 
 def test_path():
     assert Path("s3://a.txt").path == "a.txt"
-    assert Path("s3:///etc/a.txt").path == "/etc/a.txt"
+    assert Path("s3:///etc/a.txt").path == "etc/a.txt"
     assert Path("s3://a/b/c.txt").path == "a/b/c.txt"
     assert Path("s3://a").joinpath("b.txt").path == "a/b.txt"
 
 
 def test_fullpath():
     assert Path("s3://a.txt").fullpath == "s3://a.txt"
-    assert Path("s3:///etc/a.txt").fullpath == "s3:///etc/a.txt"
+    assert Path("s3:///etc/a.txt").fullpath == "s3://etc/a.txt"
     assert Path("s3://a/b/c.txt").fullpath == "s3://a/b/c.txt"
     assert Path("s3://a").joinpath("b.txt").fullpath == "s3://a/b.txt"
 
