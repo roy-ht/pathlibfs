@@ -2,7 +2,6 @@ import copy
 import datetime
 import functools
 import os
-import os.path
 import pathlib
 import tempfile
 from typing import IO, Any, List, Optional, Union
