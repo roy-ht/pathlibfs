@@ -5,8 +5,8 @@ on:
     branches:
     - main
   pull_request:
-    branches:
-    - '!releases/**'
+    # branches:
+    # - '!releases/**'
 
 jobs:
   lint:
