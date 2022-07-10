@@ -2,8 +2,9 @@ name: check
 
 on:
   pull_request:
-    branches-ignore:
-    - releases/**
+    branches:
+    - '**'
+    - '!releases/**'
   push:
     branches:
     - main
