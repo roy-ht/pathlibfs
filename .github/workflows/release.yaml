@@ -13,8 +13,8 @@ jobs:
     - run: curl -sSL https://install.python-poetry.org | python3 -
     - name: Check release version consistency
       run: |
-        TAG = "${GITHUB_REF##*/}"
-        VERSION = $(poetry version -s)
+        TAG="${GITHUB_REF##*/}"
+        VERSION="$(poetry version -s)"
         if [[ "$TAG" != "v$VERSION" ]]; then
           echo "Version mismatch !!" >> $GITHUB_STEP_SUMMARY
           exit 1
