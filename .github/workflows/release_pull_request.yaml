@@ -54,7 +54,7 @@ jobs:
         repository_url: https://test.pypi.org/legacy/
 
   production_deploy:
-    needs: build
+    needs: test_deploy
     runs-on: ubuntu-latest
     environment:
       name: production
