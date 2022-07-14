@@ -635,3 +635,4 @@ def test_session_cache(tmp_path: pathlib.Path):
     del cache["A"]
     assert not tmp_path.joinpath("A.json").exists(), list(tmp_path.iterdir())
     assert "A" not in cache
+    assert "B" in cache
