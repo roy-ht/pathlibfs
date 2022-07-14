@@ -30,6 +30,11 @@ So if you want to use some specific remote filesystem, you need to install extra
 See [known implementations](https://github.com/fsspec/filesystem_spec/blob/a8cfd9c52a20c930c67ff296b60dbcda89d64db9/fsspec/registry.py#L87)
 to check out supported protocols.
 
+# Special Environment Variables
+| name | description |
+|-|-|
+| PATHLIBFS_S3_SESSION_CACHE | If defined, store S3 session cache locally like [boto3-session-cache](https://github.com/mixja/boto3-session-cache) |
+
 # APIs
 
 `Path` class has many methods, and it's almost same as [pathlib](https://docs.python.org/3.10/library/pathlib.html) and [fsspec.AbstractFileSystem](https://filesystem-spec.readthedocs.io/en/latest/api.html#fsspec.spec.AbstractFileSystem)
