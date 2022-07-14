@@ -618,10 +618,16 @@ def test_walk(tmp: Path):
             assert root / name in (a, b, c, d)
 
 
-def test_register_session_cache(monkeypatch):
+def test_register_session_cache(tmp: Path, monkeypatch):
     monkeypatch.setenv("PATHLIBFS_S3_SESSION_CACHE", "1")
     importlib.reload(pathlibfs)
+    tmp.ls()
     assert aiobotocore.session.create_credential_resolver.__name__ == "_patch"
+    tmp.ls()
+    aio_session = aiobotocore.session.create_credential_resolver(tmp.fs.session)
+    for provider in aio_session.providers:
+        if hasattr(provider, "cache"):
+            assert isinstance(provider.cache, s3_support.CredentialCache)
 
 
 def test_session_cache(tmp_path: pathlib.Path):
@@ -636,3 +642,5 @@ def test_session_cache(tmp_path: pathlib.Path):
     assert not tmp_path.joinpath("A.json").exists(), list(tmp_path.iterdir())
     assert "A" not in cache
     assert "B" in cache
+    with pytest.raises(KeyError):
+        cache["A"]
