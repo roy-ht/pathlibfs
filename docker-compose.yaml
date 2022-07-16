@@ -10,3 +10,18 @@ services:
     environment:
       MINIO_ACCESS_KEY: pathlibfs
       MINIO_SECRET_KEY: pathlibfs
+  gcs:
+    ports:
+    - "9001:9001"
+    image: fsouza/fake-gcs-server
+    command:
+    - -scheme
+    - http
+    - -external-url
+    - 'http://127.0.0.1:9001'
+    - -public-host
+    - '127.0.0.1'
+    - -backend
+    - memory
+    - -port
+    - '9001'

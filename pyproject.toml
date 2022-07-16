@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pathlibfs"
-version = "0.1.1"
+version = "0.2.0"
 description = "pathlib 🤝 fsspec, manipulate remote filesystem paths."
 readme = "README.md"
 authors = ["Hiroyuki \"Roy\" Tanaka <aflc0x@gmail.com>"]

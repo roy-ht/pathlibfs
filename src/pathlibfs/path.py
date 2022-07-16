@@ -202,23 +202,25 @@ class Path:
                 pp = self
             else:
                 p = norm_path.rsplit(self.sep, 1)
-                if not p[0]:  # ex: /etc
-                    if self.protocol == "file":
+                if self.islocal():
+                    if len(p) == 1:
+                        pp = self.clone("")
+                    elif not p[0]:  # ex: /etc
                         pp = self.clone(self.sep)
                     else:
-                        pp = self
+                        pp = self.clone(p[0])
                 else:
-                    pp = self.clone(p[0])
+                    if len(p) == 2:
+                        pp = self.clone(p[0])
+                    else:
+                        pp = self
             self.__parent = pp
         return self.__parent
 
     @property
     def has_parent(self):
         """Return if parent exists or not"""
-        if self._path.startswith(self.sep):
-            return self._path != self.sep
-        else:
-            return self.sep in self._path
+        return self.parent != self
 
     @property
     def name(self):
@@ -467,7 +469,7 @@ class Path:
         # normalize local path
         if self.islocal():
             self._path = os.path.normpath(p)
-        elif self.protocol == "s3":
+        elif self.protocol in ("s3", "s3a", "gs", "gcs"):
             self._path = p.lstrip(self.sep)  # Remove leading separator
         else:
             self._path = p
@@ -475,7 +477,7 @@ class Path:
     @property
     def fullpath(self):
         """Path with protocol like file://a/b/c.txt or s3://mybucket/some/file.txt"""
-        return self._fs.unstrip_protocol(self._path)
+        return self.protocol + "://" + self._path
 
     @property
     def urlpath(self):

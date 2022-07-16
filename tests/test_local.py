@@ -397,12 +397,16 @@ def test_anchor(tmp_path: pathlib.Path):
 def test_parents(tmp_path: pathlib.Path):
     p = Path(tmp_path)
     assert [str(x) for x in tmp_path.parents] == [x.path for x in p.parents]
+    p = Path("a/b/c")
+    assert [x.path for x in p.parents] == ["a/b", "a", "."]
 
 
 def test_parent(tmp_path: pathlib.Path):
     p = Path(tmp_path)
     assert str(tmp_path.parent) == p.parent.path
     p = Path("/")
+    assert p.parent == p
+    p = Path("")
     assert p.parent == p
 
 
