@@ -374,6 +374,12 @@ def test_rmdir(tmp_path: pathlib.Path):
 # Others ----------------------------------------
 
 
+def test_str(tmp_path: pathlib.Path):
+    p = Path(tmp_path)
+    assert not str(p).startswith("file:")
+    assert p.fullpath.startswith("file:")
+
+
 def test_repr(tmp_path: pathlib.Path):
     fullpath_str = tmp_path.absolute().as_uri()
     assert repr(Path(tmp_path)) == f"Path({fullpath_str})"

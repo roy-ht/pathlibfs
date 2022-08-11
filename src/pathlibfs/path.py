@@ -83,7 +83,10 @@ class Path:
         return f"Path({self.urlpath})"
 
     def __str__(self):
-        return self.fullpath
+        if self.islocal():
+            return self.path
+        else:
+            return self.fullpath
 
     # ------------------------------- Wrapper of pathlib
     @property

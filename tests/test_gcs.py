@@ -365,6 +365,11 @@ def test_rmdir(tmp: Path):
 # Others ----------------------------------------
 
 
+def test_str(tmp: Path):
+    assert str(tmp).startswith("gs://")
+    assert tmp.fullpath.startswith("gs://")
+
+
 def test_repr(tmp: Path):
     fullpath_str = tmp.fullpath
     assert repr(tmp) == f"Path({fullpath_str})"
