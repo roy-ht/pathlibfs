@@ -291,7 +291,19 @@ def test_head(tmp_path: pathlib.Path):
 def test_info(tmp_path: pathlib.Path):
     info = Path(tmp_path).info()
     assert isinstance(info, dict)
-    assert list(info.keys()) == ["name", "size", "type", "created", "islink", "mode", "uid", "gid", "mtime"]
+    assert list(info.keys()) == [
+        "name",
+        "size",
+        "type",
+        "created",
+        "islink",
+        "mode",
+        "uid",
+        "gid",
+        "mtime",
+        "ino",
+        "nlink",
+    ]
 
 
 def test_invalidate_cache(tmp_path: pathlib.Path):

@@ -1,6 +1,8 @@
 import copy
 import datetime
 import functools
+import multiprocessing
+import multiprocessing.util
 import os
 import pathlib
 import tempfile
@@ -12,6 +14,9 @@ from . import exception
 
 PathLike = Union[str, os.PathLike, "Path"]
 
+_CURRENT_PID = None
+_THREAD_LOCK = multiprocessing.util.ForkAwareThreadLock()
+
 
 def only_local(otherwise: Any = None):
     def deco(f):
@@ -19,14 +24,28 @@ def only_local(otherwise: Any = None):
         def wrapper(self, *args, **kwargs):
             if self.protocol == "file":
                 return f(self, *args, **kwargs)
-            elif otherwise is not None:
+            if otherwise is not None:
                 return otherwise
-            else:
-                raise exception.PathlibfsException("file must be local")
+            raise exception.PathlibfsException("file must be local")
 
         return wrapper
 
     return deco
+
+
+def _try_reset_lock():
+    """To avoid fork deadlock, try to call reset_lock"""
+    global _CURRENT_PID
+    pid = os.getpid()
+    with _THREAD_LOCK:
+        if _CURRENT_PID != pid:
+            _CURRENT_PID = pid
+            import fsspec.asyn  # noqa
+
+            fsspec.asyn.reset_lock()  # Must call only once
+
+
+os.register_at_fork(after_in_child=_try_reset_lock)
 
 
 class Path:
@@ -38,6 +57,15 @@ class Path:
         Args:
             urlpath (str): urlpath which fsspec supports
         """
+        _try_reset_lock()
+
+        self._options = options
+        self._fs = None
+        self._chain = ""
+        self._protocol = ""
+        self._init(urlpath)
+
+    def _init(self, urlpath: PathLike):
         if isinstance(urlpath, Path):
             spath = urlpath.urlpath
         # Support PathLike object
@@ -45,7 +73,7 @@ class Path:
             spath: str = str(urlpath.__fspath__())
         else:
             spath: str = urlpath
-        fs, path = fsspec.core.url_to_fs(spath, **options)
+        fs, path = fsspec.core.url_to_fs(spath, **self._options)
         self._fs: fsspec.AbstractFileSystem = fs
         # local file system path might be relative
         if self._fs.protocol == "file":
@@ -68,6 +96,13 @@ class Path:
         else:
             self._chain = chains[0]
 
+    def __getstate__(self):
+        return {"urlpath": self.urlpath, "options": self._options}
+
+    def __setstate__(self, state):
+        self._options = state["options"]
+        self._init(state["urlpath"])
+
     def __truediv__(self, key: str) -> "Path":
         return self.joinpath(key)
 
@@ -85,8 +120,7 @@ class Path:
     def __str__(self):
         if self.islocal():
             return self.path
-        else:
-            return self.fullpath
+        return self.fullpath
 
     # ------------------------------- Wrapper of pathlib
     @property
@@ -172,16 +206,14 @@ class Path:
         """Same as pathlib for local, otherwise raise an exception"""
         if self.islocal():
             return Path(pathlib.Path(self.path).resolve(strict))
-        else:
-            return self
+        return self
 
     @property
     def parts(self):
         """Return each path "directory", almost same as path.split(sep)"""
         if self.islocal():
             return pathlib.PurePath(self._path).parts
-        else:
-            return tuple(self.path.split(self.sep))
+        return tuple(self.path.split(self.sep))
 
     @property
     def anchor(self):
@@ -193,8 +225,7 @@ class Path:
         """Return all parents"""
         if self == self.parent:
             return []
-        else:
-            return [self.parent] + self.parent.parents
+        return [self.parent] + self.parent.parents
 
     @property
     def parent(self) -> "Path":
@@ -230,42 +261,36 @@ class Path:
         """Return final path component, such as file name"""
         if self.protocol == "file":
             return pathlib.PurePath(self._path).name
-        else:
-            return self._path.rsplit(self.sep, 1)[-1]
+        return self._path.rsplit(self.sep, 1)[-1]
 
     @property
     def suffix(self):
         """Return file extension"""
         if self.protocol == "file":
             return pathlib.PurePath(self._path).suffix
-        else:
-            exts = self.name.rsplit(".", 1)
-            if len(exts) == 1:
-                return ""
-            else:
-                return "." + exts[-1]
+        exts = self.name.rsplit(".", 1)
+        if len(exts) == 1:
+            return ""
+        return "." + exts[-1]
 
     @property
     def suffixes(self):
         """Return file extensions, such as ['.tar', '.gz']"""
         if self.protocol == "file":
             return pathlib.PurePath(self._path).suffixes
-        else:
-            exts = self.name.rsplit(".")
-            if len(exts) == 1:
-                return []
-            else:
-                return ["." + x for x in exts[1:]]
+        exts = self.name.rsplit(".")
+        if len(exts) == 1:
+            return []
+        return ["." + x for x in exts[1:]]
 
     @property
     def stem(self):
         """Same as name - suffix"""
         if self.protocol == "file":
             return pathlib.PurePath(self._path).stem
-        else:
-            name = self.name
-            suffix = self.suffix
-            return name[: -len(suffix)]
+        name = self.name
+        suffix = self.suffix
+        return name[: -len(suffix)]
 
     def joinpath(self, *p) -> "Path":
         """self.path might have leading slash /, so it preserve this condition"""
@@ -286,37 +311,34 @@ class Path:
         """Same as pathlib"""
         if self.protocol == "file":
             return pathlib.PurePath(self._path).match(pattern)
-        else:
-            # if separator is not a slash, convert temporary
-            path = self._path
-            if self.sep != "/":
-                path = path.replace("/", "\tslash\t")
-                path = path.replace(self.sep, "/")
-                pattern = pattern.replace("/", "\tslash\t")
-                pattern = pattern.replace(self.sep, "/")
-            if not path.startswith("/"):
-                # always absolute
-                path = "/" + path
+        # if separator is not a slash, convert temporary
+        path = self._path
+        if self.sep != "/":
+            path = path.replace("/", "\tslash\t")
+            path = path.replace(self.sep, "/")
+            pattern = pattern.replace("/", "\tslash\t")
+            pattern = pattern.replace(self.sep, "/")
+        if not path.startswith("/"):
+            # always absolute
+            path = "/" + path
 
-            return pathlib.PurePath(path).match(pattern)
+        return pathlib.PurePath(path).match(pattern)
 
     def with_name(self, name: str) -> "Path":
         """Same as pathlib"""
         if self.protocol == "file":
             return self.clone(str(pathlib.PurePath(self._path).with_name(name)))
-        else:
-            if not self.name:
-                raise ValueError(f"{self._path} has an empty name")
-            path = self._path[: -len(self.name)] + name
-            return self.clone(path)
+        if not self.name:
+            raise ValueError(f"{self._path} has an empty name")
+        path = self._path[: -len(self.name)] + name
+        return self.clone(path)
 
     def with_suffix(self, suffix: str) -> "Path":
         """Same as pathlib"""
         if self.protocol == "file":
             return self.clone(str(pathlib.PurePath(self._path).with_suffix(suffix)))
-        else:
-            path = self._path[: -len(self.suffix)] + suffix
-            return self.clone(path)
+        path = self._path[: -len(self.suffix)] + suffix
+        return self.clone(path)
 
     # ------------------------------- Wrapper of fsspec
 
@@ -487,8 +509,7 @@ class Path:
         """Full path with url chain, like simplecache::s3://some/file.txt"""
         if self._chain:
             return f"{self._chain}::{self.fullpath}"
-        else:
-            return self.fullpath
+        return self.fullpath
 
     def relative_to(self, path: PathLike) -> str:
         """Return str instead pathlib returns Path instance"""
@@ -497,13 +518,11 @@ class Path:
             raise exception.PathlibfsException("protocol must be same")
         if self.islocal():
             return str(pathlib.PurePath(self.path).relative_to(target.path))
-        else:
-            tf = target.fullpath
-            sf = self.fullpath
-            if sf.startswith(tf + self.sep):
-                return sf[len(tf) + 1 :]
-            else:
-                raise ValueError(f"{self.path} does not start with {target.path}")
+        tf = target.fullpath
+        sf = self.fullpath
+        if sf.startswith(tf + self.sep):
+            return sf[len(tf) + 1 :]
+        raise ValueError(f"{self.path} does not start with {target.path}")
 
     def iterdir(self, **kwargs):
         """Same as ls, but returns generator"""
@@ -536,8 +555,7 @@ class Path:
         # So call it with sub directory, redirect to rm(recursive=True)
         if self.protocol == "s3" and self.sep in self.path[1:]:
             raise exception.PathlibfsException("rmdir only can call with a bucket, but it points some key.")
-        else:
-            return self._fs.rmdir(self._path)
+        return self._fs.rmdir(self._path)
 
     def samefile(self, target: PathLike):
         """Check target points a same path"""

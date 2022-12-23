@@ -4,6 +4,7 @@ Check wrapping methods as simple as possible
 """
 
 import importlib
+import multiprocessing as mp
 import pathlib
 import time
 import types
@@ -649,3 +650,17 @@ def test_session_cache(tmp_path: pathlib.Path):
     assert "B" in cache
     with pytest.raises(KeyError):
         cache["A"]
+
+
+def _f_fork_safe(p: Path):
+    content = "a" * 100
+    p.write_text(content)
+    assert p.read_text() == content
+
+
+@pytest.mark.timeout(5)
+def test_fork_safe(tmp: Path):
+    """multiprocessing using fork context"""
+    ctx = mp.get_context("fork")
+    with ctx.Pool(2) as pool:
+        pool.map(_f_fork_safe, (tmp / str(x) for x in range(10)))
