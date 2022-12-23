@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pathlibfs"
-version = "0.3.0"
+version = "0.4.0"
 description = "pathlib 🤝 fsspec, manipulate remote filesystem paths."
 readme = "README.md"
 authors = ["Hiroyuki \"Roy\" Tanaka <aflc0x@gmail.com>"]
@@ -8,15 +8,21 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-fsspec = "^2022.5.0"
+fsspec = "^2022.11.0"
 
-[tool.poetry.dev-dependencies]
-s3fs = "^2022.5.0"
-gcsfs = "^2022.5.0"
-adlfs = "^2022.2.0"
-ipython = '*'
+[tool.poetry.group.test.dependencies]
+s3fs = "^2022.11.0"
+gcsfs = "^2022.11.0"
+adlfs = "^2022.11.2"
 pytest = "^7.1.2"
 pytest-cov = "^3.0.0"
+pytest-timeout = "^2.1.0"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+ipython = '*'
 
 [tool.black]
 line-length = 120

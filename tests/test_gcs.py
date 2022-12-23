@@ -288,10 +288,10 @@ def test_info(tmp: Path):
         "md5Hash",
         "etag",
         "timeCreated",
-        "timeDeleted",
         "updated",
         "generation",
         "type",
+        "metageneration",
     }, info.keys()
 
 
@@ -534,8 +534,7 @@ def test_mkdir(tmp: Path):
     a = tmp / "a"
     assert not a.is_dir()
     s = tmp / "b" / "c"
-    with pytest.raises(Exception, match="already exists"):
-        s.mkdir()
+    s.mkdir()  # noop
     assert not s.is_dir()
 
 
