@@ -10,7 +10,7 @@ if "PATHLIBFS_S3_SESSION_CACHE" in os.environ:
 
         s3_support.register_session_cache()
     except ImportError as e:  # pragma: no cover
-        warnings.warn(f"PATHLIBFS_S3_SESSION_CACHE found, but failed: {e}")
+        warnings.warn(f"PATHLIBFS_S3_SESSION_CACHE found, but failed: {e}")  # noqa: B028
 
 
 __all__ = ["Path", "PathlibfsException"]
