@@ -8,12 +8,12 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-fsspec = "^2022.11.0"
+fsspec = "^2023.5.0"
 
 [tool.poetry.group.test.dependencies]
-s3fs = "^2022.11.0"
-gcsfs = "^2022.11.0"
-adlfs = "^2022.11.2"
+s3fs = "^2023.5.0"
+gcsfs = "^2023.5.0"
+adlfs = "^2023.4.0"
 pytest = "^7.1.2"
 pytest-cov = "^3.0.0"
 pytest-timeout = "^2.1.0"
