@@ -3,7 +3,9 @@
 Check wrapping methods as simple as possible
 """
 
+import datetime
 import pathlib
+import time
 import types
 import uuid
 
@@ -261,8 +263,13 @@ def test_pipe_file(tmp: Path):
 def test_modified(tmp: Path):
     a = tmp / "a.txt"
     a.touch()
-    with pytest.raises(NotImplementedError):
-        a.modified()
+    time.sleep(1.2)  # time resolution of GCS is seconds
+    m1 = a.modified()
+    m2 = a.modified()
+    assert m1 == m2
+    a.write_text("Hello")
+    m3 = a.modified()
+    assert m1 != m3
 
 
 def test_head(tmp: Path):
@@ -331,9 +338,10 @@ def test_exists(tmp: Path):
 
 def test_created(tmp: Path):
     a = tmp / "a.txt"
+    now = datetime.datetime.now(datetime.timezone.utc)
     a.touch()
-    with pytest.raises(NotImplementedError):
-        a.created()
+    # allow an error of 10 milliseconds or less.
+    assert 0.0 == pytest.approx((a.created() - now).total_seconds(), abs=1e-2)
 
 
 def test_cat(tmp: Path):
@@ -461,18 +469,22 @@ def test_move(tmp: Path, tmp_path: pathlib.Path):
     c = subdir / "c.txt"
     d = subsubdir / "d.txt"
     e = subsubdir / "e.txt"
+    f = tmp_path.joinpath("f.txt")
     a.touch()
     b.touch()
     c.touch()
     d.touch()
     a.move(e)
+    c.move(f)
     assert e.is_file()
     assert not a.exists()
+    assert f.is_file()
+    assert not c.exists()
     subdir.move(tmp_path, recursive=True)
     assert not subdir.exists()
-    assert tmp_path.joinpath("b.txt").exists(), list(tmp_path.iterdir())
-    assert tmp_path.joinpath("subsub/d.txt").exists(), list(tmp_path.iterdir())
-    assert tmp_path.joinpath("subsub/e.txt").exists(), list(tmp_path.iterdir())
+    assert tmp_path.joinpath("sub/b.txt").exists(), list(tmp_path.glob("**/*"))
+    assert tmp_path.joinpath("sub/subsub/d.txt").exists(), list(tmp_path.glob("**/*"))
+    assert tmp_path.joinpath("sub/subsub/e.txt").exists(), list(tmp_path.glob("**/*"))
 
 
 def test_ls(tmp: Path):
@@ -589,16 +601,21 @@ def test_copy(tmp: Path, tmp_path: pathlib.Path):
     c = subdir / "c.txt"
     d = subsubdir / "d.txt"
     e = subsubdir / "e.txt"
+    f = tmp_path.joinpath("f.txt")
     a.touch()
     b.touch()
     c.touch()
     d.touch()
     a.copy(e)
+    c.copy(f)
     assert e.is_file()
+    assert a.is_file()
+    assert f.is_file()
+    assert c.is_file()
     subdir.copy(tmp_path, recursive=True)
-    assert tmp_path.joinpath("a.txt").exists(), list(tmp_path.iterdir())
-    assert tmp_path.joinpath("subsub/d.txt").exists(), list(tmp_path.iterdir())
-    assert tmp_path.joinpath("subsub/e.txt").exists(), list(tmp_path.iterdir())
+    assert tmp_path.joinpath("sub/a.txt").exists(), list(tmp_path.glob("**/*"))
+    assert tmp_path.joinpath("sub/subsub/d.txt").exists(), list(tmp_path.glob("**/*"))
+    assert tmp_path.joinpath("sub/subsub/e.txt").exists(), list(tmp_path.glob("**/*"))
 
 
 def test_makedirs(tmp: Path):

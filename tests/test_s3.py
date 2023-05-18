@@ -461,18 +461,22 @@ def test_move(tmp: Path, tmp_path: pathlib.Path):
     c = subdir / "c.txt"
     d = subsubdir / "d.txt"
     e = subsubdir / "e.txt"
+    f = tmp_path.joinpath("f.txt")
     a.touch()
     b.touch()
     c.touch()
     d.touch()
     a.move(e)
+    c.move(f)
     assert e.is_file()
     assert not a.exists()
+    assert f.is_file()
+    assert not c.exists()
     subdir.move(tmp_path, recursive=True)
     assert not subdir.exists()
-    assert tmp_path.joinpath("b.txt").exists(), list(tmp_path.iterdir())
-    assert tmp_path.joinpath("subsub/d.txt").exists(), list(tmp_path.iterdir())
-    assert tmp_path.joinpath("subsub/e.txt").exists(), list(tmp_path.iterdir())
+    assert tmp_path.joinpath("sub/b.txt").exists(), list(tmp_path.glob("**/*"))
+    assert tmp_path.joinpath("sub/subsub/d.txt").exists(), list(tmp_path.glob("**/*"))
+    assert tmp_path.joinpath("sub/subsub/e.txt").exists(), list(tmp_path.glob("**/*"))
 
 
 def test_ls(tmp: Path):
@@ -589,16 +593,21 @@ def test_copy(tmp: Path, tmp_path: pathlib.Path):
     c = subdir / "c.txt"
     d = subsubdir / "d.txt"
     e = subsubdir / "e.txt"
+    f = tmp_path.joinpath("f.txt")
     a.touch()
     b.touch()
     c.touch()
     d.touch()
     a.copy(e)
+    c.copy(f)
+    assert a.is_file()
     assert e.is_file()
+    assert f.is_file()
+    assert c.is_file()
     subdir.copy(tmp_path, recursive=True)
-    assert tmp_path.joinpath("a.txt").exists(), list(tmp_path.iterdir())
-    assert tmp_path.joinpath("subsub/d.txt").exists(), list(tmp_path.iterdir())
-    assert tmp_path.joinpath("subsub/e.txt").exists(), list(tmp_path.iterdir())
+    assert tmp_path.joinpath("sub/a.txt").exists(), list(tmp_path.glob("**/*"))
+    assert tmp_path.joinpath("sub/subsub/d.txt").exists(), list(tmp_path.glob("**/*"))
+    assert tmp_path.joinpath("sub/subsub/e.txt").exists(), list(tmp_path.glob("**/*"))
 
 
 def test_makedirs(tmp: Path):
